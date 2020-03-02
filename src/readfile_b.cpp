@@ -20,12 +20,11 @@ bool IsQrColorRateX(vector<Point>& contour, Mat& image);
 bool IsQrColorRateY(vector<Point>& contour, Mat& image);
 void AdjustQrpoint(vector<vector<Point>>& qrPoint);
 int GetGrayScale(Mat& image, int row, int col);
+void Decode(Mat& image, vector<vector<Point>>& qrPoint, int* Code);
+bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint);
 
-void Decode(Mat& image, vector<vector<Point>>& qrPoint);
-
-int *Code=new int[1000000];
-int codenum = 0;//¼ÇÂ¼½âÂëÎ»Êı
-
+void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code, int& imnum);
+int Real_bit(int x1, int x2, int x3);
 
 //²éÕÒÂÖÀª, É¸Ñ¡³öÈı¸ö¶şÎ¬Âë¶¥µã
 bool FindQrPoint(Mat & srcImg, vector<vector<Point>> & qrPoint)//²éÕÒsrcImgµÄ¶¥µã´æÈëqrPoint
@@ -55,42 +54,14 @@ bool FindQrPoint(Mat & srcImg, vector<vector<Point>> & qrPoint)//²éÕÒsrcImgµÄ¶¥µ
 	//5¡¢method : ±íÊ¾Ò»ÌõÂÖÀªµÄ·½·¨¡£
 	//6¡¢offset : ¿ÉÑ¡µÄÆ«ÒÆ£¬¾ÍÊÇ¼òµ¥µÄÆ½ÒÆ£¬ÌØ±ğÊÇÔÚ×öÁËROI²½ÖèÖ®ºóÓĞÓÃ¡£
 
-
-	////Í¨¹ıºÚÉ«¶¨Î»½Ç×÷Îª¸¸ÂÖÀª£¬ÓĞÁ½¸ö×ÓÂÖÀªµÄÌØµã£¬É¸Ñ¡³öÈı¸ö¶¨Î»½Ç
-	//int parentIdx = -1;
-	//int ic = 0;
-	
 	for (int i = 0; i < contours.size(); i++)
 	{
-		//if (hierarchy[i][2] != -1 && ic == 0)
-		//{
-		//	parentIdx = i;
-		//	ic++;
-		//}
-		//else if (hierarchy[i][2] != -1)
-		//{
-		//	ic++;
-		//}
-		//else if (hierarchy[i][2] == -1)
-		//{
-		//	ic = 0;
-		//	parentIdx = -1;
-		//}
-
-		////ÓĞÁ½¸ö×ÓÂÖÀª²ÅÊÇ¶şÎ¬ÂëµÄ¶¥µã
-		//if (ic >= 2)
-		//{
-			//bool isQr = IsQrPoint(contours[parentIdx],threshold_output_copy);
 		bool isQr = IsQrPoint(contours[i], threshold_output_copy);
 			//±£´æÕÒµ½µÄÈı¸öºÚÉ«¶¨Î»½Ç
 			if (isQr)
 			{
-				//qrPoint.push_back(contours[parentIdx]);
 				qrPoint.push_back(contours[i]);
-				//ic = 0;
-				//parentIdx = -1;
 			}
-		//}
 	}
 
 	if (qrPoint.size() < 3)
@@ -179,8 +150,10 @@ int GetGrayScale(Mat& image, int row, int col)
 	return Scale;
 }
 //½âÂë
-void Decode(Mat& image, vector<vector<Point>>& qrPoint)
+void Decode(Mat& image, vector<vector<Point>>& qrPoint,int* Code)
 {
+	int codenum = 0;//¼ÇÂ¼½âÂëÎ»Êı
+
 	//²ÊÉ«Í¼×ª»Ò¶ÈÍ¼
 	Mat src_gray;
 	cvtColor(image, src_gray, CV_BGR2GRAY);
@@ -204,60 +177,74 @@ void Decode(Mat& image, vector<vector<Point>>& qrPoint)
 		for (int j = 0; j < 64; j++)
 		{
 			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) < 80)//ÅĞ¶¨ÎªºÚ
-				Code[codenum] = 1;
-			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) > 160)//ÅĞ¶¨Îª°×
 				Code[codenum] = 0;
+			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) > 160)//ÅĞ¶¨Îª°×
+				Code[codenum] = 1;
 			codenum++;
 		}
 	}
 }
 
-
-int main()
+//ÅĞ¶Ï¶şÎ¬ÂëÊÇ·ñÎª¿Õ
+bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint)
 {
-	char filename[15];//ÓÃÓÚÁÙÊ±´æ´¢ÎÄ¼şÃû
-	codenum = 0;
-	int imnum = 1;//¼ÇÂ¼½âÂëµÄÍ¼Æ¬ÕÅÊı
+	int* Code_temp = new int[5000];
+	Decode(image, qrPoint, Code_temp);
 
-	/*
-	WinExec("./ffmpeg.exe -i output.mp4 x%d.png", SW_SHOW);
-	WinExec(lpCmdLine, SW_SHOW);
-	*/
-
-	while (1)
+	for (int i = 0; i < 4096; i++)
 	{
-		sprintf_s(filename, 15, "x%d.png", imnum);
-		fstream inFile(filename);
-		if (inFile.good())
+		if (Code_temp[i] != 1)
 		{
-			Mat img = imread(filename);
-
-			vector<vector<Point>> qrPoint;
-			if (FindQrPoint(img, qrPoint))
-				Decode(img, qrPoint);
-		}
-		else
-			break;
-		imnum++;
+			delete Code_temp;
+			return false;
+		}		
 	}
+	delete Code_temp;
+	return true;
+}
 
-	int d = 0;//¸¨ÖúÊä³ö»»ĞĞ
-	for (int i = 0; i < codenum; i++)
+//Ò»´Î½âÂëÈıÕÅÍ¼
+void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
+{
+	int* Code1 = new int[5000];
+	int* Code2 = new int[5000];
+	int* Code3 = new int[5000];
+
+	//»ñµÃÁ¬ĞøÈıÕÅÍ¼µÄbitĞÅÏ¢£¬´æÔÚCode1£¬Code2£¬Code3ÖĞ
+	imnum++;
+	char filename1[15];
+	sprintf_s(filename1, 15, "x%d.png", imnum);
+	fstream inFile1(filename1);
+	if (!inFile1.eof())
+		Decode(image, qrPoint, Code1);
+
+	imnum++;
+	char filename2[15];
+	sprintf_s(filename2, 15, "x%d.png", imnum);
+	fstream inFile2(filename2);
+	if (!inFile2.eof())
+		Decode(image, qrPoint, Code2);
+
+	imnum++;
+	char filename3[15];
+	sprintf_s(filename3, 15, "x%d.png", imnum);
+	fstream inFile3(filename3);
+	if (!inFile3.eof())
+		Decode(image, qrPoint, Code3);
+
+	//°´Î»±È½ÏCode1£¬Code2£¬Code3£¬½«ÕæÊµĞÅÏ¢´æ·ÅÔÚCodeÖĞ
+	for (int i = 0; i < 4096; i++)
 	{
-		cout << Code[i];
-		d++;
-		if (d == 8)
-		{
-			d -= 8;
-			cout << endl;
-		}
+		Code[i] = Real_bit(Code1[i],Code2[i],Code3[i]);
 	}
+	delete Code1;
+	delete Code2;
+	delete Code3;
 
-	cout << endl;
+	//»¹Ô­Îª×Ö·û´®£¬Êä³öµ½output.txt
 	int temp = 0;
 	char temp_char;
-
-	for (int i = 0; i < codenum; i += 8)
+	for (int i = 0; i < 4096; i += 8)
 	{
 		for (int j = 7; j >= 0; j--)
 			temp = temp * 2 + Code[i + j];
@@ -265,8 +252,68 @@ int main()
 		cout << temp_char;
 		temp = 0;
 	}
+	cout << endl;
 
-	delete Code;
+	return;
+}
+//£¨°´Î»£©ÅĞ¶ÏÒ»¸öbitÕæÊµĞÅÏ¢
+int Real_bit(int x1, int x2, int x3)
+{
+	int temp=0;//¼ÇÂ¼0µÄ¸öÊı
+	if (x1 == 0)temp++;
+	if (x2 == 0)temp++;
+	if (x3 == 0)temp++;
+
+	if (temp <= 2)
+		return 0;
+	else
+		return 1;
+}
+
+
+int main()
+{
+	char filename[15];//ÓÃÓÚÁÙÊ±´æ´¢ÎÄ¼şÃû
+	int codenum = 0;
+	int imnum = 1;//¼ÇÂ¼½âÂëµÄÍ¼Æ¬ÕÅÊı
+	int Begin_flag = 0;//0±íÊ¾Ç°Í¬²½Âë£¬1±íÊ¾½áÊøÂë
+
+	//WinExec("./ffmpeg.exe -i output.mp4 x%d.png", SW_SHOW);
+	
+	while (1)
+	{
+		int* Code = new int[5000];
+		sprintf_s(filename, 15, "x%d.png", imnum++);
+		fstream inFile(filename);
+		if (inFile.good())
+		{
+			Mat img = imread(filename);
+
+			vector<vector<Point>> qrPoint;
+			if (FindQrPoint(img, qrPoint))
+			{
+				if (Is_empty(img,qrPoint))//ÓĞ¶¨Î»ÂëÇÒÎª¿Õ
+				{
+					if (Begin_flag == 0)//ÊÇ¿ªÊ¼Âë
+						continue;//¶ÁÏÂÒ»ÕÅ
+					else//ÊÇ½áÊøÂë
+						return 0;//ÍË³ö
+				}
+				else//ÓĞ¶¨Î»ÂëÇÒ²»¿Õ
+				{
+					Begin_flag = 1;//½áÊøÂë±ê¼Ç
+					Decode_new(img, qrPoint, Code,imnum);
+					delete Code;
+				}
+			}
+				
+		}
+		else
+			break;
+
+		delete Code;
+		imnum++;
+	}
 
 	waitKey(0);
 	return 0;
