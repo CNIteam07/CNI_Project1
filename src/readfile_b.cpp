@@ -211,7 +211,6 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 	int* Code3 = new int[5000];
 
 	//获得连续三张图的bit信息，存在Code1，Code2，Code3中
-	imnum++;
 	char filename1[15];
 	sprintf_s(filename1, 15, "x%d.png", imnum);
 	fstream inFile1(filename1);
@@ -292,18 +291,18 @@ int main()
 			vector<vector<Point>> qrPoint;
 			if (FindQrPoint(img, qrPoint))
 			{
-				if (Is_empty(img,qrPoint))//有定位码且为空
+				if (Is_empty(img, qrPoint))//有定位码且为空
 				{
 					if (Begin_flag == 0)//是开始码
-						continue;//读下一张
+						continue;//读下一张	
 					else//是结束码
 						return 0;//退出
 				}
 				else//有定位码且不空
 				{
 					Begin_flag = 1;//结束码标记
-					Decode_new(img, qrPoint, Code,imnum);
-					delete Code;
+					imnum--;
+					Decode_new(img, qrPoint, Code, imnum);
 				}
 			}
 				
