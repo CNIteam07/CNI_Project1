@@ -13,6 +13,9 @@
 using namespace cv;
 using namespace std;
 
+#define low_gray_bound 80 //黑边界
+#define high_gray_bound 180 //白边界
+
 bool FindQrPoint(Mat& srcImg, vector<vector<Point>>& qrPoint);
 bool IsQrPoint(vector<Point>& contour, Mat& image);
 bool IsQrColorRate(vector<Point>& contour, Mat& image);
@@ -95,10 +98,10 @@ bool IsQrColorRateX(vector<Point>& contours,Mat &image)
 	int nc = contours[x2].x-contours[x1].x;//nc表示宽度
 	int d = nc / 7;
 
-	if (GetGrayScale(image, nr, contours[0].x + d / 2) < 28 && GetGrayScale(image, nr, contours[0].x + 3*d / 2) >207 &&
-		GetGrayScale(image, nr, contours[0].x + 5*d / 2) < 28 &&GetGrayScale(image, nr, contours[0].x + 7*d / 2) < 28 && 
-		GetGrayScale(image, nr, contours[0].x + 9*d / 2) < 28 &&GetGrayScale(image, nr, contours[0].x + 11*d / 2) >207 && 
-		GetGrayScale(image, nr, contours[0].x + 13*d / 2) < 28)
+	if (GetGrayScale(image, nr, contours[0].x + d / 2) < low_gray_bound && GetGrayScale(image, nr, contours[0].x + 3*d / 2) > high_gray_bound&&
+		GetGrayScale(image, nr, contours[0].x + 5*d / 2) < low_gray_bound &&GetGrayScale(image, nr, contours[0].x + 7*d / 2) < low_gray_bound &&
+		GetGrayScale(image, nr, contours[0].x + 9*d / 2) < low_gray_bound &&GetGrayScale(image, nr, contours[0].x + 11*d / 2) > high_gray_bound&&
+		GetGrayScale(image, nr, contours[0].x + 13*d / 2) < low_gray_bound)
 		return true;
 
 	return false;
@@ -112,10 +115,10 @@ bool IsQrColorRateY(vector<Point> &contours, Mat& image)
 	int nc = contours[x1].y - contours[x2].y;//nc表示高度
 	int d = nc / 7;
 
-	if (GetGrayScale(image, contours[0].y + d / 2,nr) < 28 && GetGrayScale(image, contours[0].y + 3*d / 2, nr) > 207 &&
-		GetGrayScale(image, contours[0].y + 5*d / 2, nr) < 28 && GetGrayScale(image, contours[0].y + 7*d / 2, nr) < 28 &&
-		GetGrayScale(image, contours[0].y + 9*d / 2, nr) < 28 && GetGrayScale(image, contours[0].y + 11*d / 2, nr) > 207 &&
-		GetGrayScale(image, contours[0].y + 13*d / 2, nr) < 28)
+	if (GetGrayScale(image, contours[0].y + d / 2,nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 3*d / 2, nr) > high_gray_bound&&
+		GetGrayScale(image, contours[0].y + 5*d / 2, nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 7*d / 2, nr) < low_gray_bound &&
+		GetGrayScale(image, contours[0].y + 9*d / 2, nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 11*d / 2, nr) > high_gray_bound&&
+		GetGrayScale(image, contours[0].y + 13*d / 2, nr) < low_gray_bound)
 		return true;
 
 	return false;
@@ -176,9 +179,9 @@ void Decode(Mat& image, vector<vector<Point>>& qrPoint,int* Code)
 	{
 		for (int j = 0; j < 64; j++)
 		{
-			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) < 80)//判定为黑
+			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) < low_gray_bound)//判定为黑
 				Code[codenum] = 0;
-			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) > 160)//判定为白
+			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) > high_gray_bound)//判定为白
 				Code[codenum] = 1;
 			codenum++;
 		}
@@ -190,17 +193,17 @@ bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint)
 {
 	int* Code_temp = new int[5000];
 	Decode(image, qrPoint, Code_temp);
-
-	for (int i = 0; i < 4096; i++)
+	int white_num = 0;//记录白点个数
+	for (int i = 0; i < 4096; i+=10)
 	{
-		if (Code_temp[i] != 1)
-		{
-			delete Code_temp;
-			return false;
-		}		
+		if (Code_temp[i] == 1)
+			white_num++;
 	}
 	delete Code_temp;
-	return true;
+	if (white_num > 300)
+		return true;
+	else
+		return false;
 }
 
 //一次解码三张图
@@ -212,21 +215,20 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 
 	//获得连续三张图的bit信息，存在Code1，Code2，Code3中
 	char filename1[15];
-	sprintf_s(filename1, 15, "x%d.png", imnum);
+	sprintf_s(filename1, 15, "x%d.png", imnum++);
 	fstream inFile1(filename1);
 	if (!inFile1.eof())
 		Decode(image, qrPoint, Code1);
 
-	imnum++;
 	char filename2[15];
-	sprintf_s(filename2, 15, "x%d.png", imnum);
+	sprintf_s(filename2, 15, "x%d.png", imnum++);
 	fstream inFile2(filename2);
 	if (!inFile2.eof())
 		Decode(image, qrPoint, Code2);
 
 	imnum++;
 	char filename3[15];
-	sprintf_s(filename3, 15, "x%d.png", imnum);
+	sprintf_s(filename3, 15, "x%d.png", imnum++);
 	fstream inFile3(filename3);
 	if (!inFile3.eof())
 		Decode(image, qrPoint, Code3);
@@ -277,7 +279,7 @@ int main()
 	int imnum = 1;//记录解码的图片张数
 	int Begin_flag = 0;//0表示前同步码，1表示结束码
 
-	//WinExec("./ffmpeg.exe -i output.mp4 x%d.png", SW_SHOW);
+//WinExec("./ffmpeg.exe -i output.mp4 x%d.png", SW_SHOW);
 	
 	while (1)
 	{
@@ -311,7 +313,6 @@ int main()
 			break;
 
 		delete Code;
-		imnum++;
 	}
 
 	waitKey(0);
