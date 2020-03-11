@@ -13,8 +13,8 @@
 using namespace cv;
 using namespace std;
 
-#define low_gray_bound 80 //ºÚ±ß½ç
-#define high_gray_bound 180 //°×±ß½ç
+#define low_gray_bound 130//ºÚ±ß½ç
+#define high_gray_bound 130//°×±ß½ç
 
 bool FindQrPoint(Mat& srcImg, vector<vector<Point>>& qrPoint);
 bool IsQrPoint(vector<Point>& contour, Mat& image);
@@ -22,12 +22,17 @@ bool IsQrColorRate(vector<Point>& contour, Mat& image);
 bool IsQrColorRateX(vector<Point>& contour, Mat& image);
 bool IsQrColorRateY(vector<Point>& contour, Mat& image);
 void AdjustQrpoint(vector<vector<Point>>& qrPoint);
-int GetGrayScale(Mat& image, int row, int col);
+int GetGrayScale(Mat& image, double row, double col);
 void Decode(Mat& image, vector<vector<Point>>& qrPoint, int* Code);
 bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint);
 
 void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code, int& imnum);
 int Real_bit(int x1, int x2, int x3);
+int Real_Scale(Mat& image, double row, double col, double ddw, double ddh);
+int Real_Scale2(Mat& image, int line, int row_begin, int row_end);
+int Real_Scale3(Mat& image, int row, int line_begin, int line_end);
+
+void Adjust_Contrast(Mat& image);
 
 //²éÕÒÂÖÀª, É¸Ñ¡³öÈı¸ö¶şÎ¬Âë¶¥µã
 bool FindQrPoint(Mat & srcImg, vector<vector<Point>> & qrPoint)//²éÕÒsrcImgµÄ¶¥µã´æÈëqrPoint
@@ -64,10 +69,11 @@ bool FindQrPoint(Mat & srcImg, vector<vector<Point>> & qrPoint)//²éÕÒsrcImgµÄ¶¥µ
 			if (isQr)
 			{
 				qrPoint.push_back(contours[i]);
+				//cout << contours[i][0].x << " " << contours[i][0].y << endl;
 			}
 	}
 
-	if (qrPoint.size() < 3)
+	if (qrPoint.size() != 3)
 		return false;
 	AdjustQrpoint(qrPoint);
 	return true;
@@ -90,52 +96,82 @@ bool IsQrColorRate(vector<Point>& contours,Mat &image)
 	bool y = IsQrColorRateY(contours,image);
 	return y;
 }
-//ºáÏòºÚ°×±ÈÀıÅĞ¶Ï
-bool IsQrColorRateX(vector<Point>& contours,Mat &image)
+bool IsQrColorRateX(vector<Point>& contours, Mat& image)
 {
-	int x1 = 0, x2 = contours.size() / 2;
-	int nr = contours[x1].y+(contours[x2].y-contours[x1].y) / 2;//nr±íÊ¾ÖĞ¼äĞĞĞĞºÅ
-	int nc = contours[x2].x-contours[x1].x;//nc±íÊ¾¿í¶È
+	//ÓÃ¾ØĞÎÄâºÏÂÖÀª£¬·ÀÖ¹½Ç×ø±ê´íÎó
+	vector<Rect> boundRect(1);
+	boundRect[0] = boundingRect((Mat)contours);
+	int nr = boundRect[0].y + boundRect[0].height / 2;//nr±íÊ¾ÖĞ¼äĞĞĞĞºÅ
+	int nc = boundRect[0].width;
+
+	//int x1 = 0, x2 = contours.size() / 2;
+	//int nr = contours[x1].y + (contours[x2].y - contours[x1].y) / 2;//nr±íÊ¾ÖĞ¼äĞĞĞĞºÅ
+	//int nc = contours[x2].x - contours[x1].x;//nc±íÊ¾¿í¶È
 	int d = nc / 7;
 
-	if (GetGrayScale(image, nr, contours[0].x + d / 2) < low_gray_bound && GetGrayScale(image, nr, contours[0].x + 3*d / 2) > high_gray_bound&&
-		GetGrayScale(image, nr, contours[0].x + 5*d / 2) < low_gray_bound &&GetGrayScale(image, nr, contours[0].x + 7*d / 2) < low_gray_bound &&
-		GetGrayScale(image, nr, contours[0].x + 9*d / 2) < low_gray_bound &&GetGrayScale(image, nr, contours[0].x + 11*d / 2) > high_gray_bound&&
-		GetGrayScale(image, nr, contours[0].x + 13*d / 2) < low_gray_bound)
+	/*if (GetGrayScale(image, nr, contours[0].x + d / 2) < 28 && GetGrayScale(image, nr, contours[0].x + 3 * d / 2) > 207 &&
+		GetGrayScale(image, nr, contours[0].x + 5 * d / 2) < 28 && GetGrayScale(image, nr, contours[0].x + 7 * d / 2) < 28 &&
+		GetGrayScale(image, nr, contours[0].x + 9 * d / 2) < 28 && GetGrayScale(image, nr, contours[0].x + 11 * d / 2) > 207 &&
+		GetGrayScale(image, nr, contours[0].x + 13 * d / 2) < 28)
+		return true;*/
+	if (Real_Scale2(image, nr, boundRect[0].x,boundRect[0].x + d) == 1 &&
+		Real_Scale2(image, nr, boundRect[0].x + d, boundRect[0].x + 2*d) == 0 &&
+		Real_Scale2(image, nr, boundRect[0].x + 2 * d, boundRect[0].x + 3*d) == 1 &&
+		Real_Scale2(image, nr, boundRect[0].x + 3 * d, boundRect[0].x + 4*d) == 1 &&
+		Real_Scale2(image, nr, boundRect[0].x + 4 * d, boundRect[0].x + 5*d) == 1 &&
+		Real_Scale2(image, nr, boundRect[0].x + 5 * d, boundRect[0].x + 6*d) == 0 &&
+		Real_Scale2(image, nr, boundRect[0].x + 6 * d, boundRect[0].x + 7*d) == 1 )
 		return true;
 
 	return false;
 }
 //×İÏòºÚ°×±ÈÀıÅĞ¶Ï
-bool IsQrColorRateY(vector<Point> &contours, Mat& image)
+bool IsQrColorRateY(vector<Point>& contours, Mat& image)
 {
+	//ÓÃ¾ØĞÎÄâºÏÂÖÀª£¬·ÀÖ¹½Ç×ø±ê´íÎó
+	vector<Rect> boundRect(1);
+	boundRect[0] = boundingRect((Mat)contours);
+	int nr = boundRect[0].x + boundRect[0].width / 2;//nr±íÊ¾ÖĞ¼äÁĞÁĞºÅ
+	int nc = boundRect[0].height;
 
-	int x2 = 0, x1 = contours.size() / 2;
-	int nr = contours[x2].x + (contours[x1].x - contours[x2].x) / 2;//nr±íÊ¾ÖĞ¼äÁĞÁĞºÅ
-	int nc = contours[x1].y - contours[x2].y;//nc±íÊ¾¸ß¶È
+
+	//int x2 = 0, x1 = contours.size() / 2;
+	//int nr = contours[x2].x + (contours[x1].x - contours[x2].x) / 2;//nr±íÊ¾ÖĞ¼äÁĞÁĞºÅ
+	//int nc = contours[x1].y - contours[x2].y;//nc±íÊ¾¸ß¶È
 	int d = nc / 7;
 
-	if (GetGrayScale(image, contours[0].y + d / 2,nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 3*d / 2, nr) > high_gray_bound&&
-		GetGrayScale(image, contours[0].y + 5*d / 2, nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 7*d / 2, nr) < low_gray_bound &&
-		GetGrayScale(image, contours[0].y + 9*d / 2, nr) < low_gray_bound && GetGrayScale(image, contours[0].y + 11*d / 2, nr) > high_gray_bound&&
-		GetGrayScale(image, contours[0].y + 13*d / 2, nr) < low_gray_bound)
+	/*if (GetGrayScale(image, contours[0].y + d / 2, nr) < 28 && GetGrayScale(image, contours[0].y + 3 * d / 2, nr) > 207 &&
+		GetGrayScale(image, contours[0].y + 5 * d / 2, nr) < 28 && GetGrayScale(image, contours[0].y + 7 * d / 2, nr) < 28 &&
+		GetGrayScale(image, contours[0].y + 9 * d / 2, nr) < 28 && GetGrayScale(image, contours[0].y + 11 * d / 2, nr) > 207 &&
+		GetGrayScale(image, contours[0].y + 13 * d / 2, nr) < 28)
+		return true;*/
+	if (Real_Scale3(image, nr, boundRect[0].y, boundRect[0].y + d) == 1 &&
+		Real_Scale3(image, nr, boundRect[0].y + d, boundRect[0].y + 2 * d) == 0 &&
+		Real_Scale3(image, nr, boundRect[0].y + 2 * d, boundRect[0].y + 3 * d) == 1 &&
+		Real_Scale3(image, nr, boundRect[0].y + 3 * d, boundRect[0].y + 4 * d) == 1 &&
+		Real_Scale3(image, nr, boundRect[0].y + 4 * d, boundRect[0].y + 5 * d) == 1 &&
+		Real_Scale3(image, nr, boundRect[0].y + 5 * d, boundRect[0].y + 6 * d) == 0 &&
+		Real_Scale3(image, nr, boundRect[0].y + 6 * d, boundRect[0].y + 7 * d) == 1)
 		return true;
 
 	return false;
 }
-
 //ĞŞÕı3¸ö¶¥µãµÄË³Ğò(×óÉÏpt0£¬ÓÒÉÏpt1£¬×óÏÂpt2)
 void AdjustQrpoint(vector<vector<Point>>& qrPoint)
 {
 	int pt0, pt1, pt2;
 	vector<vector<Point>> qrPoint_temp[3];
+	vector<Rect> boundRect(3);
+	for(int i=0;i<3;i++)
+		boundRect[i] = boundingRect((Mat)qrPoint[i]);
+	
 	for (int i = 0; i < 3; i++)
 	{
-		if (qrPoint[i][0].x >= qrPoint[0][0].x && qrPoint[i][0].x >= qrPoint[1][0].x
-			&& qrPoint[i][0].x >= qrPoint[2][0].x)
+		if (boundRect[i].x >= boundRect[0].x && boundRect[i].x >= boundRect[1].x
+			&& boundRect[i].x >= boundRect[2].x)
 			pt1 = i;//x×î´óµÄÎªÓÒÉÏ
-		else if (qrPoint[i][0].y >= qrPoint[0][0].y && qrPoint[i][0].y >= qrPoint[1][0].y
-			&& qrPoint[i][0].y >= qrPoint[2][0].y)
+		else if (boundRect[i].y >= boundRect[0].y && boundRect[i].y >= boundRect[1].y
+			&& boundRect[i].y >= boundRect[2].y)
 			pt2 = i;//y×î´óµÄÎª×óÏÂ
 		else
 			pt0 = i;//Ê£ÏÂµÄÎª×óÉÏ
@@ -146,10 +182,10 @@ void AdjustQrpoint(vector<vector<Point>>& qrPoint)
 	qrPoint.assign(qrPoint_temp->begin(),qrPoint_temp->end());//°Ñ½»»»ÍêµÄÊı¾İ¿½±´»ØqrPoint
 }
 //»ñµÃ»Ò¶ÈÖµ
-int GetGrayScale(Mat& image, int row, int col)
+int GetGrayScale(Mat& image, double row, double col)
 {
 	uchar* data = image.ptr<uchar>(row);
-	int Scale = data[col];
+	int Scale = data[(int)col];
 	return Scale;
 }
 //½âÂë
@@ -166,26 +202,53 @@ void Decode(Mat& image, vector<vector<Point>>& qrPoint,int* Code)
 	threshold(src_gray, threshold_output, 0, 255, THRESH_BINARY | THRESH_OTSU);
 	Mat threshold_output_copy = threshold_output.clone();
 
-	int temp = qrPoint[0].size();
-	int white_wid = (qrPoint[0][temp / 2].x - qrPoint[0][0].x)*2/21;//¡°10/105¡±
-	int row0 = qrPoint[0][temp / 2].y+white_wid,
-		col0 = qrPoint[0][temp / 2].x+white_wid,
-		row1 = qrPoint[2][0].y-white_wid,
-		col1 = qrPoint[1][0].x-white_wid;
+	//ÓÃ¾ØĞÎÄâºÏÂÖÀª£¬·ÀÖ¹½Ç×ø±ê´íÎó
+	vector<Rect> boundRect(3);
+	for(int i=0;i<3;i++)
+		boundRect[i] = boundingRect(qrPoint[i]);
+	double white_wid = boundRect[0].width*2/21;
+	double row0 = boundRect[0].y + boundRect[0].height + white_wid,
+		col0 = boundRect[0].x + boundRect[0].width + white_wid,
+		row1 = boundRect[2].y - white_wid,
+		col1 = boundRect[1].x - white_wid;
+
+
+	//double temp = qrPoint[0].size();
+	//double white_wid = (qrPoint[0][temp / 2].x - qrPoint[0][0].x)*2/21;//¡°10/105¡±
+	//double row0 = qrPoint[0][temp / 2].y+white_wid,
+	//	col0 = qrPoint[0][temp / 2].x+white_wid,
+	//	row1 = qrPoint[2][0].y-white_wid,
+	//	col1 = qrPoint[1][0].x-white_wid;
 	double dw = (col1 - col0)/64.0,
 			dh = (row1 - row0)/64.0;
+	double ddw = dw / 6,//ddw£¬ddhÓÃÓÚÔÚÃ¿¸öĞ¡É«¿é¶ùÀïÔÙ¶à´ÎÈ¡µã£¬Ìá¸ßÊ¶±ğµÄ×¼È·¶È
+		ddh = dh / 6;
 	
 	for (int i = 0; i < 64; i++)
 	{
 		for (int j = 0; j < 64; j++)
 		{
-			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) < low_gray_bound)//ÅĞ¶¨ÎªºÚ
-				Code[codenum] = 0;
-			if (GetGrayScale(threshold_output_copy, row0 + (int)(dh * (2 * i + 1)/2), col0 + (int)(dw * (2 * j + 1)/2)) > high_gray_bound)//ÅĞ¶¨Îª°×
-				Code[codenum] = 1;
-			codenum++;
+			Code[codenum++] = Real_Scale(threshold_output_copy, row0 + dh * (2.0 * i + 1) / 2, col0 + dw * (2.0 * j + 1) / 2, ddw, ddh);
 		}
 	}
+}
+
+
+int Real_Scale(Mat& image, double row, double col, double ddw, double ddh)
+{
+	int num=0;//ºÚµã¸öÊı"1"
+	for (double i = row - ddw; i <= row + ddw; i += ddw)
+	{
+		for (double j = col - ddh; j < col + ddh; j += ddh)
+		{
+			if (GetGrayScale(image, i, j)< low_gray_bound)
+				num++;
+		}
+	}
+	if (num >= 5)
+		return 1;
+	else
+		return 0;
 }
 
 //ÅĞ¶Ï¶şÎ¬ÂëÊÇ·ñÎª¿Õ
@@ -193,14 +256,15 @@ bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint)
 {
 	int* Code_temp = new int[5000];
 	Decode(image, qrPoint, Code_temp);
+	cout << endl;
 	int white_num = 0;//¼ÇÂ¼°×µã¸öÊı
-	for (int i = 0; i < 4096; i+=10)
+	for (int i = 0; i < 4096; i+=1)
 	{
-		if (Code_temp[i] == 1)
+		if (Code_temp[i] == 0)
 			white_num++;
 	}
-	delete Code_temp;
-	if (white_num > 300)
+	delete []Code_temp;
+	if (white_num >3000)
 		return true;
 	else
 		return false;
@@ -214,33 +278,35 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 	int* Code3 = new int[5000];
 
 	//»ñµÃÁ¬ĞøÈıÕÅÍ¼µÄbitĞÅÏ¢£¬´æÔÚCode1£¬Code2£¬Code3ÖĞ
-	char filename1[15];
-	sprintf_s(filename1, 15, "x%d.png", imnum++);
+	char filename1[50];
+	sprintf_s(filename1, 50, "x%d.png", imnum++);
 	fstream inFile1(filename1);
 	if (!inFile1.eof())
 		Decode(image, qrPoint, Code1);
+	cout << endl << "imnum=" << imnum - 1 << endl;
 
-	char filename2[15];
-	sprintf_s(filename2, 15, "x%d.png", imnum++);
+	char filename2[50];
+	sprintf_s(filename2, 50, "x%d.png", imnum++);
 	fstream inFile2(filename2);
 	if (!inFile2.eof())
 		Decode(image, qrPoint, Code2);
+	cout << endl << "imnum=" << imnum - 1 << endl;
 
-	imnum++;
-	char filename3[15];
-	sprintf_s(filename3, 15, "x%d.png", imnum++);
+	char filename3[50];
+	sprintf_s(filename3, 50, "x%d.png", imnum++);
 	fstream inFile3(filename3);
 	if (!inFile3.eof())
 		Decode(image, qrPoint, Code3);
+	cout << endl << "imnum=" << imnum-1 << endl;
 
 	//°´Î»±È½ÏCode1£¬Code2£¬Code3£¬½«ÕæÊµĞÅÏ¢´æ·ÅÔÚCodeÖĞ
 	for (int i = 0; i < 4096; i++)
 	{
 		Code[i] = Real_bit(Code1[i],Code2[i],Code3[i]);
 	}
-	delete Code1;
-	delete Code2;
-	delete Code3;
+	delete []Code1;
+	delete []Code2;
+	delete []Code3;
 
 	//»¹Ô­Îª×Ö·û´®£¬Êä³öµ½output.txt
 	int temp = 0;
@@ -253,7 +319,6 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 		cout << temp_char;
 		temp = 0;
 	}
-	cout << endl;
 
 	return;
 }
@@ -265,34 +330,121 @@ int Real_bit(int x1, int x2, int x3)
 	if (x2 == 0)temp++;
 	if (x3 == 0)temp++;
 
-	if (temp <= 2)
+	if (temp >= 2)
 		return 0;
 	else
 		return 1;
 }
 
+//µ÷½Ú¶Ô±È¶È
+void Adjust_Contrast(Mat& image)
+{
+	int rows = image.rows;
+	int cols = image.cols;
+	int channels = image.channels();
+	float alpha = 1.5;
+	float beta = 10;
+	Mat dst(image.size(), image.type());
+
+	for (int row = 0; row < rows; row++) {
+		const uchar* currentSrcRow = image.ptr<uchar>(row);
+		uchar* currentDstRow = dst.ptr<uchar>(row);
+		for (int col = 0; col < cols * channels; col++) {
+			currentDstRow[col] = saturate_cast<uchar>(alpha * currentSrcRow[col] + beta);
+		}
+	}
+	/*dst.copyTo(image);*/
+	
+	/*namedWindow("output image", CV_WINDOW_NORMAL);
+	imshow("output image", dst);*/
+}
+
+int Real_Scale2(Mat& image, int line, int row_begin, int row_end)
+{
+	int width = row_end - row_begin;
+	int num = 0;
+	for (int i = row_begin; i <= row_end; i++)
+	{
+		if (GetGrayScale(image, line, i) <= low_gray_bound)
+			num++;
+	}
+	if (num > width / 2)
+		return 1;
+	else
+		return 0;
+}
+int Real_Scale3(Mat& image, int row, int line_begin, int line_end)
+{
+	int height = line_end - line_begin;
+	int num = 0;
+	for (int i = line_begin; i <= line_end; i++)
+	{
+		if (GetGrayScale(image, i, row) <= low_gray_bound)
+			num++;
+	}
+	if (num > height / 2)
+		return 1;
+	else
+		return 0;
+}
 
 int main()
 {
-	char filename[15];//ÓÃÓÚÁÙÊ±´æ´¢ÎÄ¼şÃû
+	char filename[50];//ÓÃÓÚÁÙÊ±´æ´¢ÎÄ¼şÃû
 	int codenum = 0;
 	int imnum = 1;//¼ÇÂ¼½âÂëµÄÍ¼Æ¬ÕÅÊı
 	int Begin_flag = 0;//0±íÊ¾Ç°Í¬²½Âë£¬1±íÊ¾½áÊøÂë
 
-//WinExec("./ffmpeg.exe -i output.mp4 x%d.png", SW_SHOW);
-	
+//WinExec("./ffmpeg.exe -i output.mp4 -r 30 x%d.png", SW_SHOW);
+
+	//while (1)
+	//{
+	//	sprintf_s(filename, 50, "x%d.png", imnum++);
+	//	//sprintf_s(filename, 50, "test6.png");
+	//	fstream inFile(filename);
+	//	if (inFile.good())
+	//	{
+	//		Mat image = imread(filename);
+	//		int rows = image.rows;
+	//		int cols = image.cols;
+	//		int channels = image.channels();
+	//		float alpha = 1.3;
+	//		float beta = 10;
+	//		Mat dst(image.size(), image.type());
+
+	//		for (int row = 0; row < rows; row++) {
+	//			const uchar* currentSrcRow = image.ptr<uchar>(row);
+	//			uchar* currentDstRow = dst.ptr<uchar>(row);
+	//			for (int col = 0; col < cols * channels; col++) {
+	//				currentDstRow[col] = saturate_cast<uchar>(alpha * currentSrcRow[col] + beta);
+	//			}
+	//		}
+	//		dst.copyTo(image);
+
+	//		imwrite(filename, image);
+	//	}
+	//	else break;
+	//}
+	//
 	while (1)
 	{
 		int* Code = new int[5000];
-		sprintf_s(filename, 15, "x%d.png", imnum++);
+		sprintf_s(filename, 50, "x%d.png", imnum++);
+		//sprintf_s(filename, 50, "x23.png");
 		fstream inFile(filename);
 		if (inFile.good())
 		{
 			Mat img = imread(filename);
+			//Adjust_Contrast(img);
+			/*namedWindow("output image", CV_WINDOW_AUTOSIZE);
+			imshow("output image", img);*/
 
 			vector<vector<Point>> qrPoint;
+		//	cout << "x" << imnum - 1 << ".png=" << FindQrPoint(img, qrPoint) << endl;
+			cout << endl << "imnum=" << imnum-1 << endl;
 			if (FindQrPoint(img, qrPoint))
 			{
+				cout << "x" << imnum - 1 << ".png_empty=" << Is_empty(img, qrPoint) << endl;
 				if (Is_empty(img, qrPoint))//ÓĞ¶¨Î»ÂëÇÒÎª¿Õ
 				{
 					if (Begin_flag == 0)//ÊÇ¿ªÊ¼Âë
@@ -312,7 +464,7 @@ int main()
 		else
 			break;
 
-		delete Code;
+		delete []Code;
 	}
 
 	waitKey(0);
