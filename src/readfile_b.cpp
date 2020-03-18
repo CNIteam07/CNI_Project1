@@ -32,6 +32,8 @@ int Real_Scale(Mat& image, double row, double col, double ddw, double ddh);
 int Real_Scale2(Mat& image, int line, int row_begin, int row_end);
 int Real_Scale3(Mat& image, int row, int line_begin, int line_end);
 
+int check(int code_check[12]);
+
 void Adjust_Contrast(Mat& image);
 
 //查找轮廓, 筛选出三个二维码顶点
@@ -192,6 +194,7 @@ int GetGrayScale(Mat& image, double row, double col)
 void Decode(Mat& image, vector<vector<Point>>& qrPoint,int* Code)
 {
 	int codenum = 0;//记录解码位数
+	int* Code_temp = new int[5000];//临时存储带有纠错码的信息
 
 	//彩色图转灰度图
 	Mat src_gray;
@@ -206,30 +209,99 @@ void Decode(Mat& image, vector<vector<Point>>& qrPoint,int* Code)
 	vector<Rect> boundRect(3);
 	for(int i=0;i<3;i++)
 		boundRect[i] = boundingRect(qrPoint[i]);
-	double white_wid = boundRect[0].width*2/21;
+	double white_wid = boundRect[0].width*2.0/21;	//10/105;
 	double row0 = boundRect[0].y + boundRect[0].height + white_wid,
 		col0 = boundRect[0].x + boundRect[0].width + white_wid,
 		row1 = boundRect[2].y - white_wid,
 		col1 = boundRect[1].x - white_wid;
 
-
-	//double temp = qrPoint[0].size();
-	//double white_wid = (qrPoint[0][temp / 2].x - qrPoint[0][0].x)*2/21;//“10/105”
-	//double row0 = qrPoint[0][temp / 2].y+white_wid,
-	//	col0 = qrPoint[0][temp / 2].x+white_wid,
-	//	row1 = qrPoint[2][0].y-white_wid,
-	//	col1 = qrPoint[1][0].x-white_wid;
-	double dw = (col1 - col0)/64.0,
-			dh = (row1 - row0)/64.0;
-	double ddw = dw / 6,//ddw，ddh用于在每个小色块儿里再多次取点，提高识别的准确度
-		ddh = dh / 6;
+	double dw = (col1 - col0)/60.0,
+			dh = (row1 - row0)/60.0;
+	double ddw = dw / 9,//ddw，ddh用于在每个小色块儿里再多次取点，提高识别的准确度
+		ddh = dh / 9;
 	
-	for (int i = 0; i < 64; i++)
+	for (int i = 0; i < 60; i++)
 	{
-		for (int j = 0; j < 64; j++)
+		for (int j = 0; j < 60; j++)
 		{
-			Code[codenum++] = Real_Scale(threshold_output_copy, row0 + dh * (2.0 * i + 1) / 2, col0 + dw * (2.0 * j + 1) / 2, ddw, ddh);
+			//Code[codenum++] = Real_Scale(threshold_output_copy, row0 + dh * (2.0 * i + 1) / 2, col0 + dw * (2.0 * j + 1) / 2, ddw, ddh);
+			if (GetGrayScale(threshold_output_copy, row0 + dh * (2.0 * i + 1) / 2, col0 + dw * (2.0 * j + 1) / 2) < low_gray_bound)
+				Code_temp[codenum++] = 1;
+			else
+				Code_temp[codenum++] = 0;
 		}
+	}
+	/*for (int i = 0; i < 3600; i++)
+		cout << Code_temp[i];
+	cout << endl;*/
+	//按纠错码纠正Code_temp
+	for (int i = 0; i < 3600; i+=12)
+	{
+		int code_check[12];
+		for (int j = 0; j < 12; j++)//截取12位放入code_check[12]中
+		{
+			code_check[j] = Code_temp[i + j];
+		}
+		int bit = check(code_check);
+		if(bit!=-1)
+			Code_temp[i + bit] = (Code_temp[i + bit] + 1) % 2;//纠正Code_temp
+	}
+	
+	//将纠错后的信息流存入Code
+	for (int i = 0; i < 3600; i+=12)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			Code[i*2/3 + j] = Code_temp[i + j];
+		}
+	}
+	/*for (int i = 0; i < 2400; i++)
+		cout << Code[i];
+	cout << endl;*/
+
+	delete []Code_temp;
+}
+//传入数组，返回出错的位数
+int check(int code_check[12])
+{
+	int Gx[5] = { 1,0,0,1,1 };//Gx=10011
+	int copy_code[12];
+	for (int i = 0; i <= 11; i++)copy_code[i] = code_check[i];
+	for (int i = 0; i <= 7; i++)
+	{
+		if (copy_code[i] == 1)
+		{
+			for (int k = 0; k <= 4; k++)
+			{
+				if (copy_code[i + k] != Gx[k])copy_code[i + k] = 1;
+				else copy_code[i + k] = 0;
+			}
+		}
+	}
+	int result_crc = 0;
+	for (int i = 8; i <= 11; i++)
+	{
+		result_crc = result_crc * 2 + copy_code[i];
+	}
+	if (result_crc == 0)return -1;
+
+	switch (result_crc)
+	{
+	case 14:return 0;
+	case 7:return 1;
+	case 10:return 2;
+	case 5:return 3;
+	case 11:return 4;
+	case 12:return 5;
+	case 6:return 6;
+	case 3:return 7;
+	case 8:return 8;
+	case 4:return 9;
+	case 2:return 10;
+	case 1:return 11;
+	default:
+		return -1;	//由于4位可纠错16位，信息8+4=12位，正确1位，还多出来3位，暂时不作处理
+	break;
 	}
 }
 
@@ -257,14 +329,15 @@ bool Is_empty(Mat& image, vector<vector<Point>>& qrPoint)
 	int* Code_temp = new int[5000];
 	Decode(image, qrPoint, Code_temp);
 	cout << endl;
-	int white_num = 0;//记录白点个数
-	for (int i = 0; i < 4096; i+=1)
+	int num = 0;//记录黑点个数
+	for (int i = 0; i < 2400; i++)
 	{
-		if (Code_temp[i] == 0)
-			white_num++;
+		if (Code_temp[i] == 1)
+			num++;
 	}
 	delete []Code_temp;
-	if (white_num >3000)
+
+	if (num <1)
 		return true;
 	else
 		return false;
@@ -278,29 +351,45 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 	int* Code3 = new int[5000];
 
 	//获得连续三张图的bit信息，存在Code1，Code2，Code3中
-	char filename1[50];
-	sprintf_s(filename1, 50, "x%d.png", imnum++);
-	fstream inFile1(filename1);
-	if (!inFile1.eof())
-		Decode(image, qrPoint, Code1);
-	cout << endl << "imnum=" << imnum - 1 << endl;
+	Decode(image, qrPoint, Code1);
+	cout << endl << "imnum=" << imnum << endl;
+	imnum++;
 
 	char filename2[50];
-	sprintf_s(filename2, 50, "x%d.png", imnum++);
+	sprintf_s(filename2, 50, "x%d.png", imnum);
 	fstream inFile2(filename2);
 	if (!inFile2.eof())
-		Decode(image, qrPoint, Code2);
-	cout << endl << "imnum=" << imnum - 1 << endl;
+	{
+		Mat image2 = imread(filename2);
+		vector<vector<Point>> qrPoint2;
+		FindQrPoint(image2, qrPoint2);
+		Decode(image2, qrPoint2, Code2);
+	}
+	cout << endl << "imnum=" << imnum<< endl;
+	/*for (int i = 0; i < 2400; i++)
+		cout << Code2[i];
+	cout << endl;*/
+	imnum++;
 
 	char filename3[50];
-	sprintf_s(filename3, 50, "x%d.png", imnum++);
+	sprintf_s(filename3, 50, "x%d.png", imnum);
 	fstream inFile3(filename3);
 	if (!inFile3.eof())
-		Decode(image, qrPoint, Code3);
-	cout << endl << "imnum=" << imnum-1 << endl;
+	{
+		Mat image3 = imread(filename3);
+		vector<vector<Point>> qrPoint3;
+		FindQrPoint(image3, qrPoint3);
+		Decode(image3, qrPoint3, Code3);
+	}
+	cout << endl << "imnum=" << imnum<< endl;
+	/*for (int i = 0; i < 2400; i++)
+		cout << Code3[i];
+	cout << endl;*/
+	imnum++;
+
 
 	//按位比较Code1，Code2，Code3，将真实信息存放在Code中
-	for (int i = 0; i < 4096; i++)
+	for (int i = 0; i < 2400; i++)
 	{
 		Code[i] = Real_bit(Code1[i],Code2[i],Code3[i]);
 	}
@@ -308,12 +397,15 @@ void Decode_new(Mat& image, vector<vector<Point>>& qrPoint, int* Code,int&imnum)
 	delete []Code2;
 	delete []Code3;
 
+	//for (int i = 0; i < 2400; i++)
+	//	cout << Code[i];
+	//cout << endl;
 	//还原为字符串，输出到output.txt
 	int temp = 0;
 	char temp_char;
-	for (int i = 0; i < 4096; i += 8)
+	for (int i = 0; i < 2400; i += 8)
 	{
-		for (int j = 7; j >= 0; j--)
+		for (int j=0;j<8;j++)
 			temp = temp * 2 + Code[i + j];
 		temp_char = (char)temp;
 		cout << temp_char;
@@ -426,11 +518,14 @@ int main()
 	//	else break;
 	//}
 	//
+
+
 	while (1)
 	{
 		int* Code = new int[5000];
+		
 		sprintf_s(filename, 50, "x%d.png", imnum++);
-		//sprintf_s(filename, 50, "x23.png");
+		//sprintf_s(filename, 50, "x15.png");
 		fstream inFile(filename);
 		if (inFile.good())
 		{
